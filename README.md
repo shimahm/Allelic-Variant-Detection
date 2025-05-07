@@ -165,6 +165,3 @@ This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-## 📬 Contact
-
-Open an issue for questions, contributions, or feedback.
