@@ -1,155 +1,170 @@
-# Allelic-Variant-Detection
-Allelic Variant Detection in Parental Lines Using NCBI Sequence Data
-Allelic Variant Detection in Parental Lines Using NCBI Sequence Data
-This pipeline guides you through identifying allelic variants (SNPs/Indels) present in parental lines using publicly available sequence data from the NCBI Sequence Read Archive (SRA).
+# 🧬 Allelic Variant Detection in Parental Lines Using NCBI Sequence Data
 
-📦 Requirements
-Make sure the following tools are installed and accessible in your environment:
+This repository provides a complete pipeline for identifying **allelic variants (SNPs/Indels)** present in parental lines using publicly available **NCBI SRA** sequencing data.
 
-sra-tools (for downloading FASTQ files)
+---
 
-bwa (for alignment)
+## 📦 Requirements
 
-samtools (for processing BAM files)
+Install the following tools before starting:
 
-bcftools (for variant calling and comparison)
+| Tool         | Use Case                         | Installation |
+|--------------|----------------------------------|--------------|
+| `sra-tools`  | Download sequencing data         | [Link](https://github.com/ncbi/sra-tools) |
+| `bwa`        | Read alignment                   | [Link](http://bio-bwa.sourceforge.net/) |
+| `samtools`   | BAM/SAM file handling            | [Link](https://www.htslib.org/) |
+| `bcftools`   | Variant calling and comparison   | [Link](https://samtools.github.io/bcftools/) |
+| `snpEff`     | (Optional) Variant annotation    | [Link](http://snpeff.sourceforge.net/) |
 
-snpEff (optional, for variant annotation)
+---
 
-🔍 Step 1: Download Sequence Data from NCBI SRA
-First, find the parental lines on NCBI SRA and copy the SRA accession number (e.g., SRR12345678).
+## 🔢 Step 1: Download Sequencing Data from NCBI
 
-Download FASTQ files:
+1. Go to [https://www.ncbi.nlm.nih.gov/sra](https://www.ncbi.nlm.nih.gov/sra)
+2. Search for the parental line and note its **SRA run accession** (e.g., `SRR12345678`)
+3. Download the data using `sra-tools`:
 
-bash
-Copy
-Edit
-# Download SRA file
+```bash
+# Download the SRA file
 prefetch SRR12345678
 
-# Convert SRA to FASTQ
+# Convert to FASTQ format
 fasterq-dump SRR12345678
-Repeat for all parental samples.
+```
 
-📂 Step 2: Download the Reference Genome
-Get a high-quality reference genome (FASTA format) from:
+Repeat this for each parental line.
 
-NCBI Assembly
+---
 
-Ensembl Plants
+## 🌱 Step 2: Download the Reference Genome
 
-Example:
+1. Go to [NCBI Assembly](https://www.ncbi.nlm.nih.gov/assembly) or [Ensembl Plants](https://plants.ensembl.org/index.html)
+2. Search for your species and download the **genomic FASTA (.fna.gz)** file
+3. Prepare the reference:
 
-bash
-Copy
-Edit
-wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/XXXXXX/.../GCA_XXXX_genomic.fna.gz
+```bash
+# Download the genome
+wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/XXXXXX/GCA_XXXX_genomic.fna.gz
+
+# Unzip and rename
 gunzip GCA_XXXX_genomic.fna.gz
-🧬 Step 3: Align Reads to the Reference Genome
-Index the reference:
+mv GCA_XXXX_genomic.fna reference.fna
+```
 
-bash
-Copy
-Edit
+---
+
+## 🧷 Step 3: Align Reads to the Reference Genome
+
+### 3.1 Index the reference genome
+
+```bash
 bwa index reference.fna
-Align reads for each parent:
+```
 
-bash
-Copy
-Edit
-# Example for paired-end reads
-bwa mem reference.fna parent_R1.fastq parent_R2.fastq > parent.sam
-Convert SAM to sorted BAM:
+### 3.2 Align paired-end reads
 
-bash
-Copy
-Edit
-samtools view -Sb parent.sam | samtools sort -o parent.bam
-samtools index parent.bam
-🧪 Step 4: Call Variants with bcftools
-bash
-Copy
-Edit
-# Create BCF and call variants
-bcftools mpileup -Ou -f reference.fna parent.bam | \
+```bash
+bwa mem reference.fna SRR12345678_1.fastq SRR12345678_2.fastq > parent.sam
+```
+
+### 3.3 Convert, sort, and index alignment
+
+```bash
+samtools view -Sb parent.sam > parent.bam
+samtools sort parent.bam -o parent.sorted.bam
+samtools index parent.sorted.bam
+```
+
+Repeat this for each parental line.
+
+---
+
+## 🧪 Step 4: Call Variants Using `bcftools`
+
+### 4.1 Variant calling
+
+```bash
+bcftools mpileup -Ou -f reference.fna parent.sorted.bam | \
 bcftools call -mv -Oz -o parent.vcf.gz
+```
 
-# Index the VCF
+### 4.2 Index the VCF file
+
+```bash
 bcftools index parent.vcf.gz
-Repeat this for each parent.
+```
 
-🧠 Step 5 (Optional): Annotate Variants with snpEff
-If you want to understand the functional impact of the variants:
+Repeat for each parent.
 
-bash
-Copy
-Edit
-# Run snpEff annotation
-snpEff ann your_genome_db parent.vcf.gz > annotated_parent.vcf
-Replace your_genome_db with the appropriate SnpEff genome name. You may need to build your own database if it's not available.
+---
 
-⚖️ Step 6: Compare Variants Between Parents
-Use bcftools isec or bcftools compare to find shared and unique alleles:
+## 🧠 Step 5: (Optional) Annotate Variants with `snpEff`
 
-bash
-Copy
-Edit
-# Compare VCFs from Parent1 and Parent2
+### 5.1 Run annotation
+
+```bash
+snpEff ann reference_db parent.vcf.gz > parent_annotated.vcf
+```
+
+### 5.2 To build a custom database (if not available):
+
+```bash
+# Place your reference.fna and reference.gff in snpEff/data/reference_db/
+# Then build:
+snpEff build -gff3 reference_db
+```
+
+---
+
+## ⚖️ Step 6: Compare Variants Between Parents
+
+Use `bcftools isec` to identify unique and shared variants:
+
+```bash
 bcftools isec parent1.vcf.gz parent2.vcf.gz -p isec_output/
-This will generate:
+```
 
-Shared SNPs/Indels
+This generates:
 
-Unique variants in each parent
+| File         | Description            |
+|--------------|------------------------|
+| `0000.vcf`   | Unique to parent1      |
+| `0001.vcf`   | Unique to parent2      |
+| `0002.vcf`   | Shared between parents |
 
-Visual Venn-style comparison files
+### (Optional) Variant statistics
 
-📁 Output Files
-File/Folder	Description
-parent.bam	Sorted alignment file
-parent.vcf.gz	Variant calls (compressed)
-annotated.vcf	Annotated variants (optional)
-isec_output/	Directory with comparison results
+```bash
+bcftools stats -F reference.fna -s - parent1.vcf.gz parent2.vcf.gz > stats.txt
+```
 
-📝 Notes
-Ensure read quality by optionally running FastQC before alignment.
+---
 
-Use multiqc for aggregated quality reports.
+## ✅ Output Summary
 
-Consider using GATK or DeepVariant for more advanced variant calling.
+| File                   | Description                       |
+|------------------------|-----------------------------------|
+| `parent.sorted.bam`    | Aligned, sorted reads             |
+| `parent.vcf.gz`        | Variant calls                     |
+| `parent_annotated.vcf` | Annotated variants (optional)     |
+| `isec_output/`         | Comparison of parent variants     |
 
-🧬 Example
-If you have the following data:
+---
 
-Parents: SRR12345678 (Parent1), SRR87654321 (Parent2)
+## 🧪 Extra Tips
 
-Reference: brassica_ref.fna
+- Always check read quality with `FastQC`
+- Automate steps with a Snakemake or bash script
+- For structural variation, consider tools like `Delly`, `Manta`, or `LUMPY`
 
-The steps would be:
+---
 
-bash
-Copy
-Edit
-# Download and convert
-fasterq-dump SRR12345678
-fasterq-dump SRR87654321
+## 📘 License
 
-# Align
-bwa mem brassica_ref.fna SRR12345678_1.fastq SRR12345678_2.fastq | samtools sort -o parent1.bam
-bwa mem brassica_ref.fna SRR87654321_1.fastq SRR87654321_2.fastq | samtools sort -o parent2.bam
+This project is licensed under the [MIT License](LICENSE).
 
-# Index BAM
-samtools index parent1.bam
-samtools index parent2.bam
+---
 
-# Call variants
-bcftools mpileup -Ou -f brassica_ref.fna parent1.bam | bcftools call -mv -Oz -o parent1.vcf.gz
-bcftools mpileup -Ou -f brassica_ref.fna parent2.bam | bcftools call -mv -Oz -o parent2.vcf.gz
+## 📬 Contact
 
-# Compare
-bcftools isec parent1.vcf.gz parent2.vcf.gz -p isec_output/
-📬 Contact
-If you find this helpful or need support, feel free to open an issue or fork the repository.
-
-📘 License
-This pipeline is released under the MIT License.
+Open an issue for questions, contributions, or feedback.
